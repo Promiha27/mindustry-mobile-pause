@@ -45,7 +45,7 @@ Events.on(ClientLoadEvent, () => {
 
     let dragging = false;
     let wasDragged = false;
-    let startTableX = 0, startTableY = 0, startLocalX = 0, startLocalY = 0;
+    let startTableX = 0, startTableY = 0, dragStartStageX = 0, dragStartStageY = 0;
 
     let table = new Table();
     table.setSize(BUTTON_SIZE, BUTTON_SIZE);
@@ -96,15 +96,22 @@ Events.on(ClientLoadEvent, () => {
             dragging = true;
             startTableX = table.x;
             startTableY = table.y;
-            startLocalX = x;
-            startLocalY = y;
+            // stageX/Y - координаты в системе отсчёта stage, не зависящие
+            // от того, что мы сами двигаем table (и, значит, button) каждый
+            // кадр. Локальные x,y (переданные аргументом) пересчитываются
+            // относительно УЖЕ сдвинутой кнопки на каждом кадре, поэтому
+            // формула "start + (x - startLocal)" с ними даёт дельту только
+            // последнего кадра, а не суммарное смещение с начала жеста -
+            // при плавном свайпе это гасится почти в ноль и кнопка не едет.
+            dragStartStageX = event.stageX;
+            dragStartStageY = event.stageY;
         },
         drag(event, x, y, pointer) {
             wasDragged = true;
             let w = Core.graphics.getWidth(), h = Core.graphics.getHeight();
             table.setPosition(
-                mheClamp(startTableX + (x - startLocalX), 0, w - BUTTON_SIZE),
-                mheClamp(startTableY + (y - startLocalY), 0, h - BUTTON_SIZE)
+                mheClamp(startTableX + (event.stageX - dragStartStageX), 0, w - BUTTON_SIZE),
+                mheClamp(startTableY + (event.stageY - dragStartStageY), 0, h - BUTTON_SIZE)
             );
         },
         dragStop(event, x, y, pointer) {
