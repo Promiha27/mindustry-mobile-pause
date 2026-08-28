@@ -68,13 +68,6 @@ Events.on(ClientLoadEvent, () => {
           i.setDisabled(Vars.state.rules.pauseDisabled || (Vars.state.isCampaign() && Vars.state.afterGameOver));
           i.getStyle().imageUp = Vars.state.isPaused() ? Icon.play : Icon.pause;
 
-          // table.visible - это одновременно и boolean-поле, и метод
-          // visible(Boolp) у Element; Rhino при доступе table.visible
-          // резолвит в поле, поэтому table.visible(fn) падает с "not a
-          // function, it is boolean" - обновляем полем каждый кадр вместо
-          // Cell.visible(Boolp), которым раньше управляли через .visible().
-          table.visible = Vars.mobile && Vars.state.isGame() && !Vars.net.client();
-
           // синхронизируем пиксельную позицию с сохранённой долей экрана
           // каждый кадр (кроме как во время самого перетаскивания) - так
           // положение остаётся верным и после смены разрешения/поворота.
@@ -85,9 +78,17 @@ Events.on(ClientLoadEvent, () => {
                   mheClamp(fracY * h - BUTTON_SIZE / 2, 0, h - BUTTON_SIZE)
               );
           }
-      });
-
-    table.visible = false; // до первого кадра update(), чтобы не мигнуть в неверном месте
+      })
+      // важно: видимость переключаем через Cell.visible(Boolp), а не через
+      // table.visible(fn) - у Element (и, значит, у Table) "visible" это
+      // одновременно и boolean-поле, и метод, и Rhino резолвит property
+      // access в поле, так что table.visible(fn) падает с "not a function,
+      // it is boolean". А если вместо этого просто присвоить полю
+      // table.visible = false, то сам table перестаёт рисоваться - а вместе
+      // с ним и update() выше, который единственный мог вернуть его в true
+      // (эта версия крашила игру на старте, следующая - просто прятала
+      // кнопку навсегда). У Cell такой коллизии нет - там только метод.
+      .visible(() => Vars.mobile && Vars.state.isGame() && !Vars.net.client());
 
     let button = cell.get();
     button.addListener(extend(DragListener, {
