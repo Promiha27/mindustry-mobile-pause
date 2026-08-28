@@ -1,0 +1,12 @@
+{
+    name: "mobile-pause"
+    displayName: "Mobile Pause"
+    author: "sonka"
+    description: "Working pause button on mobile. The built-in mobile HUD pause button turns into a player-list toggle while you're hosting, instead of pausing."
+    version: "1.0"
+    minGameVersion: "154"
+    main: "scripts/main"
+    hidden: true
+    java: false
+    script: true
+}
