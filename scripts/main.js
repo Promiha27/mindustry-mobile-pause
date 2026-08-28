@@ -68,6 +68,13 @@ Events.on(ClientLoadEvent, () => {
           i.setDisabled(Vars.state.rules.pauseDisabled || (Vars.state.isCampaign() && Vars.state.afterGameOver));
           i.getStyle().imageUp = Vars.state.isPaused() ? Icon.play : Icon.pause;
 
+          // table.visible - это одновременно и boolean-поле, и метод
+          // visible(Boolp) у Element; Rhino при доступе table.visible
+          // резолвит в поле, поэтому table.visible(fn) падает с "not a
+          // function, it is boolean" - обновляем полем каждый кадр вместо
+          // Cell.visible(Boolp), которым раньше управляли через .visible().
+          table.visible = Vars.mobile && Vars.state.isGame() && !Vars.net.client();
+
           // синхронизируем пиксельную позицию с сохранённой долей экрана
           // каждый кадр (кроме как во время самого перетаскивания) - так
           // положение остаётся верным и после смены разрешения/поворота.
@@ -80,7 +87,7 @@ Events.on(ClientLoadEvent, () => {
           }
       });
 
-    table.visible(() => Vars.mobile && Vars.state.isGame() && !Vars.net.client());
+    table.visible = false; // до первого кадра update(), чтобы не мигнуть в неверном месте
 
     let button = cell.get();
     button.addListener(extend(DragListener, {
