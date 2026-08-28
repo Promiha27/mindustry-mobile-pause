@@ -12,9 +12,9 @@
 // десктопе (!net.client()) - работает и в одиночной игре, и при хостинге,
 // пропадает только для обычного подключённого клиента (как и на ПК).
 //
-// Кнопку можно перетащить пальцем в любое место экрана - позиция хранится
-// в Core.settings как доля от ширины/высоты экрана (а не в пикселях), чтобы
-// не съезжать при смене разрешения/поворота экрана.
+// Позиция кнопки настраивается двумя слайдерами в настройках мода (доля
+// от ширины/высоты экрана, а не пиксели - чтобы не съезжать при смене
+// разрешения/поворота экрана).
 
 if (global.mhe && global.mhe._loaded) {
     return;
@@ -38,25 +38,11 @@ function mheClamp(v, lo, hi) {
 }
 
 Events.on(ClientLoadEvent, () => {
-    // Доля от ширины/высоты экрана - по умолчанию верхний правый угол,
-    // как у старого статично расположенного варианта кнопки.
-    let fracX = Core.settings.getFloat("mhe-pause-fx", 0.93);
-    let fracY = Core.settings.getFloat("mhe-pause-fy", 0.88);
-
-    let dragging = false;
-    let wasDragged = false;
-    let startTableX = 0, startTableY = 0, dragStartStageX = 0, dragStartStageY = 0;
-
     let table = new Table();
     table.setSize(BUTTON_SIZE, BUTTON_SIZE);
     table.defaults().size(BUTTON_SIZE);
 
-    let cell = table.button(Icon.pause, Styles.clearNonei, () => {
-        if (wasDragged) {
-            // это был перетаск, а не тап - паузу не переключаем
-            wasDragged = false;
-            return;
-        }
+    table.button(Icon.pause, Styles.clearNonei, () => {
         if (Vars.net.client()) return; // как на десктопе - обычный клиент паузу не ставит
         if (Vars.state.rules.pauseDisabled) {
             Vars.ui.hudfrag.showPauseDisabled();
@@ -68,16 +54,16 @@ Events.on(ClientLoadEvent, () => {
           i.setDisabled(Vars.state.rules.pauseDisabled || (Vars.state.isCampaign() && Vars.state.afterGameOver));
           i.getStyle().imageUp = Vars.state.isPaused() ? Icon.play : Icon.pause;
 
-          // синхронизируем пиксельную позицию с сохранённой долей экрана
-          // каждый кадр (кроме как во время самого перетаскивания) - так
-          // положение остаётся верным и после смены разрешения/поворота.
-          if (!dragging) {
-              let w = Core.graphics.getWidth(), h = Core.graphics.getHeight();
-              table.setPosition(
-                  mheClamp(fracX * w - BUTTON_SIZE / 2, 0, w - BUTTON_SIZE),
-                  mheClamp(fracY * h - BUTTON_SIZE / 2, 0, h - BUTTON_SIZE)
-              );
-          }
+          // позиция - доля от ширины/высоты экрана, настраивается слайдерами
+          // в настройках мода; пересчитываем в пиксели каждый кадр, чтобы
+          // не съезжать при смене разрешения/поворота экрана.
+          let w = Core.graphics.getWidth(), h = Core.graphics.getHeight();
+          let fracX = Core.settings.getInt("mhe-pause-x", 93) / 100;
+          let fracY = Core.settings.getInt("mhe-pause-y", 88) / 100;
+          table.setPosition(
+              mheClamp(fracX * w - BUTTON_SIZE / 2, 0, w - BUTTON_SIZE),
+              mheClamp(fracY * h - BUTTON_SIZE / 2, 0, h - BUTTON_SIZE)
+          );
       })
       // важно: видимость переключаем через Cell.visible(Boolp), а не через
       // table.visible(fn) - у Element (и, значит, у Table) "visible" это
@@ -90,40 +76,49 @@ Events.on(ClientLoadEvent, () => {
       // кнопку навсегда). У Cell такой коллизии нет - там только метод.
       .visible(() => Vars.mobile && Vars.state.isGame() && !Vars.net.client());
 
-    let button = cell.get();
-    button.addListener(extend(DragListener, {
-        dragStart(event, x, y, pointer) {
-            dragging = true;
-            startTableX = table.x;
-            startTableY = table.y;
-            // stageX/Y - координаты в системе отсчёта stage, не зависящие
-            // от того, что мы сами двигаем table (и, значит, button) каждый
-            // кадр. Локальные x,y (переданные аргументом) пересчитываются
-            // относительно УЖЕ сдвинутой кнопки на каждом кадре, поэтому
-            // формула "start + (x - startLocal)" с ними даёт дельту только
-            // последнего кадра, а не суммарное смещение с начала жеста -
-            // при плавном свайпе это гасится почти в ноль и кнопка не едет.
-            dragStartStageX = event.stageX;
-            dragStartStageY = event.stageY;
-        },
-        drag(event, x, y, pointer) {
-            wasDragged = true;
-            let w = Core.graphics.getWidth(), h = Core.graphics.getHeight();
-            table.setPosition(
-                mheClamp(startTableX + (event.stageX - dragStartStageX), 0, w - BUTTON_SIZE),
-                mheClamp(startTableY + (event.stageY - dragStartStageY), 0, h - BUTTON_SIZE)
-            );
-        },
-        dragStop(event, x, y, pointer) {
-            dragging = false;
-            let w = Core.graphics.getWidth(), h = Core.graphics.getHeight();
-            fracX = (table.x + BUTTON_SIZE / 2) / w;
-            fracY = (table.y + BUTTON_SIZE / 2) / h;
-            Core.settings.put("mhe-pause-fx", fracX);
-            Core.settings.put("mhe-pause-fy", fracY);
-            wasDragged = false;
-        }
-    }));
-
     Core.app.post(() => Vars.ui.hudGroup.addChild(table));
+});
+
+// Раздел настроек мода (слайдеры X/Y позиции) в общем меню настроек игры.
+//
+// ВАЖНО (тот же грабли уже задокументированы в CustomUnitPortraits/scripts/
+// settings-ui.js и ExtendedUIPlus/scripts/ui/other/settings-ui.js на этом же
+// клиенте): объект `t`, который приходит в колбэк
+// Vars.ui.settings.addCategory(...), - это НАСТОЯЩАЯ SettingsMenuDialog.
+// SettingsTable из игрового экрана настроек со строкой поиска. Любой "сырой"
+// виджет (t.row()/t.button()/t.add()), не добавленный через t.pref(...),
+// НАВСЕГДА отключает поиск по настройкам во всём экране (не только в этой
+// категории). Поэтому в саму категорию добавляется РОВНО один pref() -
+// кнопка открытия своего диалога; слайдеры живут в отдельном BaseDialog со
+// своим обычным SettingsTable, куда это ограничение не относится.
+Events.on(ClientLoadEvent, () => {
+    const settingsDialog = new BaseDialog("Mobile Pause");
+    settingsDialog.addCloseButton();
+
+    settingsDialog.cont.pane((() => {
+        const contentTable = new SettingsMenuDialog.SettingsTable();
+        contentTable.sliderPref("mhe-pause-x", 93, 0, 100, 1, i => i + "%");
+        contentTable.sliderPref("mhe-pause-y", 88, 0, 100, 1, i => i + "%");
+        return contentTable;
+    })());
+
+    try {
+        const openButtonSetting = extend(SettingsMenuDialog.SettingsTable.Setting, "mhe-open-settings", {
+            add: table => {
+                table.button("Mobile Pause", Styles.defaultt, () => settingsDialog.show()).width(240).height(50);
+                table.row();
+            }
+        });
+        // title участвует в поиске по настройкам; конструктор Setting сам бы
+        // взял его из несуществующего bundle-ключа setting.mhe-open-settings.name.
+        openButtonSetting.title = "Mobile Pause";
+        Vars.ui.settings.addCategory("Mobile Pause", t => t.pref(openButtonSetting));
+    } catch (e) {
+        // Фолбэк на сырой способ: варнинг в логе вернётся, но кнопка гарантированно будет.
+        Log.err("[MobilePause] settings: custom Setting failed, falling back to raw button: " + e);
+        Vars.ui.settings.addCategory("Mobile Pause", t => {
+            t.row();
+            t.button("Mobile Pause", Styles.defaultt, () => settingsDialog.show()).width(240).height(50);
+        });
+    }
 });
